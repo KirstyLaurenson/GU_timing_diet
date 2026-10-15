@@ -8,10 +8,10 @@ library(bayestestR)
 library(ggeffects)
 
 #### data ####
-breed_df <- read.csv("new breeding/breed_dates_success.csv") # breeding success and lay dates
-cov_df <- read.csv("new breeding/enviro_cov_breeding.csv")   # environmental covariates
+breed_df <- read.csv("breed_dates_success.csv") # breeding success and lay dates
+cov_df <- read.csv("enviro_cov_breeding.csv")   # environmental covariates
 cov_df$medianlay <- breed_df$medianlay
-diet_df <- read.csv("new breeding/diet_data.csv") # chick diet observations
+diet_df <- read.csv("diet_data.csv") # chick diet observations
 
 # scale covariates
 cov_z <- cov_df %>% mutate_at(c("spring_air", "spring_sst", "winter_air", "winter_sst",
@@ -200,7 +200,9 @@ success_df <- breed_df %>% slice(4:35)
 # model
 brm_success_lay <- brm(success | trials(pairs) ~ medianlay, 
              family = binomial("logit"), 
-             data = success_df
+             data = success_df,
+             iter = 6000, 
+             warmup = 2000
 )
 
 summary(brm_success_lay)
@@ -232,41 +234,72 @@ predicted_lay_success <- cbind(newdata, fits)
 
 #### trend in breeding success over time ####
 
-# model
-brm_success_time <- brm(success | trials(pairs) ~ year, 
+# scale year first, as we wil be squaring it
+success_df$year_z <- scale(success_df$year)
+
+# linear model
+brm_success_time <- brm(success | trials(pairs) ~ year_z, 
              family = binomial("logit"), 
-             data = success_df
+             data = success_df, 
+             iter = 6000, 
+             warmup = 2000
 )
 
 summary(brm_success_time)
 describe_posterior(brm_success_time)
 
-# plot
-# Create a sequence of predictor values
-newdata2 <- data.frame(year = seq(min(success_df$year),  max(success_df$year), length.out = 100), pairs = 1)
+# try quadratic model - looks like breeding success has declined at steeper rate 
+# towards end of study period
 
-# Get predicted values
-fits2 <- fitted(brm_success_time, newdata = newdata2, scale = "response")
+brm_success_quad <- brm(
+  success | trials(pairs) ~ year_z + I(year_z^2),
+  family = binomial("logit"),
+  data = success_df,
+  iter = 6000, 
+  warmup = 2000
+)
 
-# combine
-predicted_success_time <- cbind(newdata2, fits2)
+summary(brm_success_quad)
+describe_posterior(brm_success_quad)
 
-# plot
-(successtrend <- ggplot(success_df, aes(x = year, y = success / pairs)) +
-    geom_line(col = "grey40", lwd = 0.3) +
-    geom_line(data = predicted_success_time, aes(x = year, y = Estimate), color = "#56B4E9") +
-    geom_ribbon(data = predicted_success_time, aes(y = Estimate, ymin = Q2.5, ymax = Q97.5), alpha = 0.3, fill = "#56B4E9") +
-    labs(y = "Breeding success probability", x = "Year") +
-    ylim(0.6, 0.92) +
-    scale_x_continuous(labels = c(1995, 2005, 2015, 2025), 
-                       breaks = c(1995, 2005, 2015, 2025)) +
-    theme_bw() +
+# compare with LOO-CV
+loo_quad <- loo(brm_success_quad)
+loo_linear <- loo(brm_success_time)
+
+loo_compare(loo_quad, loo_linear)
+# quadratic model better supported - use this model
+
+# Create prediction data
+newdata_q <- data.frame(year_z = seq(min(success_df$year_z), max(success_df$year_z), length.out = 200), pairs = 1)
+
+# Posterior predictions on the response (probability) scale
+pred_q <- fitted(brm_success_quad, newdata = newdata_q, scale = "response", summary = TRUE)
+
+# Convert scaled years back to calendar years
+year_mean <- mean(success_df$year)
+year_sd   <- sd(success_df$year)
+
+newdata_q$year <- newdata_q$year_z * year_sd + year_mean
+
+newdata_q$estimate <- pred_q[, "Estimate"]
+newdata_q$lower    <- pred_q[, "Q2.5"]
+newdata_q$upper    <- pred_q[, "Q97.5"]
+
+# Plot
+(successtrend <- ggplot(newdata_q, aes(x = year, y = estimate)) +
+  geom_line(data = success_df, aes(x = year, y = success/pairs), col = "grey40", lwd = 0.3) +
+  geom_ribbon(aes(ymin = lower, ymax = upper),alpha = 0.3, fill = "#56B4E9") +
+  geom_line(col = "#56B4E9") +
+  #geom_point(data = success_df, aes(x = year, y = success/pairs), col = "grey40") +
+  labs(x = "Year",y = "Breeding success probability") +
+  scale_x_continuous(labels = c(1995, 2005, 2015, 2025), 
+                     breaks = c(1995, 2005, 2015, 2025)) +
+  ylim(0.6, 0.92) +
+  theme_bw() +
     theme(strip.background = element_blank(),
           strip.text.x = element_blank(), 
           axis.text = element_text(size = 8), 
-          axis.title = element_text(size = 9),
-          legend.title = element_text(size = 9), 
-          legend.text = element_text(size = 8)))
+          axis.title = element_text(size = 9)))
 
 #### create figure 2 ####
 (comb1 <- plot_grid(laytrend, springtrend, ssttrend, nrow = 1, labels = c("A", "B", "C"), label_size = 8, 
