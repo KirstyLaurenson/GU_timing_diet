@@ -11,7 +11,7 @@ library(ggeffects)
 breed_df <- read.csv("new breeding/breed_dates_success.csv") # breeding success and lay dates
 cov_df <- read.csv("new breeding/enviro_cov_breeding.csv")   # environmental covariates
 cov_df$medianlay <- breed_df$medianlay
-diet_df <- read.csv("new breeding/diet_data.csv")
+diet_df <- read.csv("new breeding/diet_data.csv") # chick diet observations
 
 # scale covariates
 cov_z <- cov_df %>% mutate_at(c("spring_air", "spring_sst", "winter_air", "winter_sst",
@@ -284,8 +284,8 @@ predicted_success_time <- cbind(newdata2, fits2)
     theme(panel.background = element_rect(fill = "white")) +
     panel_border(colour = "white"))
 
-#save_plot("breeding success/all_breeding_results.pdf", all_final, base_height = 5, base_width = 7, dpi = 600)
-#save_plot("breeding success/all_breeding_results.png", all_final, base_height = 5, base_width = 7, dpi = 600)
+#save_plot("all_breeding_results.pdf", all_final, base_height = 5, base_width = 7, dpi = 600)
+#save_plot("all_breeding_results.png", all_final, base_height = 5, base_width = 7, dpi = 600)
 
 #### diet analysis ####
 
@@ -508,5 +508,5 @@ predicted_diet_success <- cbind(newdata3, fits3)
     theme(panel.background = element_rect(fill = "white")) +
     panel_border(colour = "white"))
 
-#save_plot("feeding/all_results_2026.pdf", p12_final, base_height = 6, base_width = 7, dpi = 600)
-#save_plot("feeding/all_results_2026.png", p12_final, base_height = 6, base_width = 7, dpi = 600)
+#save_plot("all_results_2026.pdf", p12_final, base_height = 6, base_width = 7, dpi = 600)
+#save_plot("all_results_2026.png", p12_final, base_height = 6, base_width = 7, dpi = 600)
